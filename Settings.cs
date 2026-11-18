@@ -123,6 +123,7 @@ namespace DynIsland
         // updates
         public bool AutoCheckUpdates = true;   // look for a new GitHub release at start
         public string UpdateNotified = "";     // last version announced on the island (once per version)
+        public string UpdatedFrom = "";        // set just before an update restarts the app; checked once at the next start
     }
 
     public class TodoItem
@@ -1472,7 +1473,7 @@ namespace DynIsland
                             btn = K.PillBtn("Update to " + Updater.LatestVersion, Theme.Accent, Brushes.White, 30, () =>
                                 Updater.InstallAsync(() => Dispatcher.BeginInvoke(new Action(() => isl.Restart()))));
                         break;
-                    case Updater.St.Downloading: text = "Downloading… " + (int)(Updater.Progress * 100) + "%"; break;
+                    case Updater.St.Downloading: text = "Downloading v" + Updater.LatestVersion + "… " + (int)(Updater.Progress * 100) + "% · to " + Updater.WorkDir + " (removed after installing)"; break;
                     case Updater.St.Installing: text = "Installing, the island will restart…"; break;
                     case Updater.St.Error: text = Updater.Error; btn = K.PillBtn("Try again", Theme.Surface, Theme.Text, 30, check); break;
                     default: text = "Updates come from github.com/" + AppInfo.Repo + "."; btn = K.PillBtn("Check for updates", Theme.Surface, Theme.Text, 30, check); break;

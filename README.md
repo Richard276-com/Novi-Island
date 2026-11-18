@@ -175,6 +175,12 @@ Notes for contributors:
 - The compiler is C# 5: no string interpolation (`$"…"`), no `?.`, no `=>` members, no `nameof`.
 - Debug logging: set `DI_DEBUG=1` before starting; logs go to `%APPDATA%\DynamicIsland\error.log`.
 
+### Releasing
+
+1. Bump `AppInfo.Version` in `Updater.cs` (e.g. `"1.0.2"`).
+2. Run `release.bat`. It closes a running island, rebuilds, checks that the exe reports the new version and writes `dist\DynamicIsland-v<version>.zip`.
+3. On GitHub, create a release tagged `v<version>` and attach that zip. Installed copies pick it up from Settings → About (or at start).
+
 ---
 
 ## Command line (IPC)

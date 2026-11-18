@@ -10,6 +10,13 @@ using System.Net;
 using System.Text;
 using System.Threading;
 
+// Stamped into the exe (Properties → Details) so the updater and release.bat can read a build's version.
+[assembly: System.Reflection.AssemblyTitle("Dynamic Island")]
+[assembly: System.Reflection.AssemblyProduct("Dynamic Island")]
+[assembly: System.Reflection.AssemblyVersion(DynIsland.AppInfo.Version)]
+[assembly: System.Reflection.AssemblyFileVersion(DynIsland.AppInfo.Version)]
+[assembly: System.Reflection.AssemblyInformationalVersion(DynIsland.AppInfo.Version)]
+
 namespace DynIsland
 {
     static class AppInfo
@@ -108,7 +115,7 @@ namespace DynIsland
 
         static void Install()
         {
-            string work = Path.Combine(Path.GetTempPath(), "DynamicIsland-update");
+            string work = WorkDir;
             try { if (Directory.Exists(work)) Directory.Delete(work, true); } catch { }
             Directory.CreateDirectory(work);
 
@@ -133,6 +140,12 @@ namespace DynIsland
             }
             else newExe = file;
 
+            // the download must really be the newer build, or we'd swap in the same version forever
+            string got = ExeVersion(newExe);
+            if (!IsNewer(got, AppInfo.Version))
+                throw new Exception("The v" + LatestVersion + " download contains " + (got.Length > 0 ? "version " + got : "an older build") +
+                    ", not v" + LatestVersion + ". Nothing was changed; the release needs a fresh build.");
+
             string exe = Store.ExePath, dir = Path.GetDirectoryName(exe), old = exe + ".old";
             try { if (File.Exists(old)) File.Delete(old); } catch { old = exe + "." + DateTime.Now.Ticks + ".old"; }
             File.Move(exe, old);
@@ -152,6 +165,7 @@ namespace DynIsland
                 }
             }
             try { Directory.Delete(work, true); } catch { }
+            Store.S.UpdatedFrom = AppInfo.Version;   // saved by Restart(); the next start confirms the new version
         }
 
         // Called at startup: removes the exe left behind by the last update.
@@ -187,6 +201,20 @@ namespace DynIsland
                 }
                 return ms.ToArray();
             }
+        }
+
+        // where the download goes while installing (removed afterwards)
+        public static string WorkDir { get { return Path.Combine(Path.GetTempPath(), "DynamicIsland-update"); } }
+
+        // version stamped into an exe; builds from before the stamp report "" (or 0.0.0.0)
+        public static string ExeVersion(string path)
+        {
+            try
+            {
+                var v = System.Diagnostics.FileVersionInfo.GetVersionInfo(path).ProductVersion ?? "";
+                return v == "0.0.0.0" ? "" : v;
+            }
+            catch { return ""; }
         }
 
         static string Str(Dictionary<string, object> d, string k) { object v; return d != null && d.TryGetValue(k, out v) && v != null ? v.ToString() : ""; }

@@ -1501,6 +1501,21 @@ namespace DynIsland
 
         void StartupGreeting()
         {
+            // just came back from an update: say whether it took
+            if (!string.IsNullOrEmpty(S.UpdatedFrom))
+            {
+                string from = S.UpdatedFrom; S.UpdatedFrom = ""; Store.Save();
+                var uc = Timer(1800, null);
+                uc.Tick += delegate
+                {
+                    uc.Stop();
+                    if (from != AppInfo.Version)
+                        SystemEvent("", Theme.Accent, "Updated to v" + AppInfo.Version, "Was v" + from + " · click for Settings → About", Pri.System, 5000, "updated", () => OpenSettings("about"));
+                    else
+                        SystemEvent("", Theme.Accent, "Update didn't apply", "Still on v" + AppInfo.Version + " · see Settings → About", Pri.System, 6000, "updated", () => OpenSettings("about"));
+                };
+                uc.Start();
+            }
             // a new GitHub release: announce it once per version, a while after start
             if (S.AutoCheckUpdates)
             {
