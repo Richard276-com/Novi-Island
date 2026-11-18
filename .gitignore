@@ -14,3 +14,6 @@ obj/
 Thumbs.db
 desktop.ini
 .claude/
+
+# Release packages
+*.zip

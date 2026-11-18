@@ -53,7 +53,7 @@ namespace DynIsland
                 {
                     k.SetValue("DisplayName", "Dynamic Island");
                     k.SetValue("DisplayIcon", InstalledExe);
-                    k.SetValue("DisplayVersion", "2.0");
+                    k.SetValue("DisplayVersion", AppInfo.Version);
                     k.SetValue("Publisher", "Dynamic Island");
                     k.SetValue("InstallLocation", Dir);
                     k.SetValue("UninstallString", "\"" + InstalledExe + "\" --uninstall");

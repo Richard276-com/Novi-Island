@@ -43,7 +43,7 @@ namespace DynIsland
         public static byte[] Get(string url, int timeout)
         {
             var r = (System.Net.HttpWebRequest)System.Net.WebRequest.Create(url);
-            r.UserAgent = "DynamicIsland/2.0 (Windows)"; r.Timeout = timeout; r.ReadWriteTimeout = timeout;
+            r.UserAgent = AppInfo.UserAgent; r.Timeout = timeout; r.ReadWriteTimeout = timeout;
             r.AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate;
             using (var resp = r.GetResponse())
             using (var s = resp.GetResponseStream())
@@ -166,7 +166,7 @@ namespace DynIsland
             string path = Path.Combine(dir, w.Provider + "-" + safeId + ext);
             if (File.Exists(path)) return path;
             var r = (System.Net.HttpWebRequest)System.Net.WebRequest.Create(w.Full);
-            r.UserAgent = "DynamicIsland/2.0 (Windows)"; r.Timeout = 30000; r.ReadWriteTimeout = 60000;
+            r.UserAgent = AppInfo.UserAgent; r.Timeout = 30000; r.ReadWriteTimeout = 60000;
             string tmp = path + ".part";
             using (var resp = r.GetResponse())
             using (var s = resp.GetResponseStream())

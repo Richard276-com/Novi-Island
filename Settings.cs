@@ -120,6 +120,9 @@ namespace DynIsland
         public List<string> HomeTiles = new List<string>();     // Home shortcuts (empty = default set), up to 5
         public int OpenTo = 0;                 // what a plain open shows: 0 smart (timer/music first), 1 home, 2 last page
         public int HoverDelay = 260;           // ms the pointer rests on the island before it opens
+        // updates
+        public bool AutoCheckUpdates = true;   // look for a new GitHub release at start
+        public string UpdateNotified = "";     // last version announced on the island (once per version)
     }
 
     public class TodoItem
@@ -1431,6 +1434,7 @@ namespace DynIsland
         FrameworkElement BuildAbout()
         {
             var p = Page("About", "Dynamic Island for Windows. Native WPF, no dependencies.");
+            p.Children.Add(BuildUpdates());
             Func<bool, string> ok = b => b ? "active" : "not available";
             p.Children.Add(Card(
                 Row("Volume (CoreAudio)", ok(Svc.Audio.Available), null),
@@ -1442,6 +1446,48 @@ namespace DynIsland
                 Row("Setup wizard", "Walk through the first-run setup again (install, look, pages…).", K.PillBtn("Run setup", Theme.Surface, Theme.Text, 30, () => { AnimatedClose(); isl.OpenSetup(); })),
                 Row("Restart", "Close and start the app again.", K.PillBtn("Restart", Theme.Surface, Theme.Text, 30, () => isl.Restart()))));
             return p;
+        }
+
+        // Version + updater card. The status line and button are refreshed in place while it works.
+        FrameworkElement BuildUpdates()
+        {
+            var row = Row("Version " + AppInfo.Version, "Updates come from github.com/" + AppInfo.Repo + ".", null);
+            var desc = ((StackPanel)row.Children[0]).Children.OfType<TextBlock>().Last();
+            var host = new Border { VerticalAlignment = VerticalAlignment.Center };
+            Grid.SetColumn(host, 1); row.Children.Add(host);
+            var notes = K.PillBtn("What's new", Theme.Surface, Theme.Text, 30, () => AppIndex.Open(Updater.PageUrl));
+            var notesRow = Row("Release notes", null, notes);
+
+            Action refresh = () =>
+            {
+                Action check = () => Updater.CheckAsync(null);
+                string text; FrameworkElement btn = null;
+                switch (Updater.State)
+                {
+                    case Updater.St.Checking: text = "Checking GitHub…"; break;
+                    case Updater.St.UpToDate: text = "You're on the latest version."; btn = K.PillBtn("Check again", Theme.Surface, Theme.Text, 30, check); break;
+                    case Updater.St.Available:
+                        text = "Version " + Updater.LatestVersion + " is available." + (Updater.AssetUrl.Length == 0 ? " The release has no download attached yet." : "");
+                        if (Updater.AssetUrl.Length > 0)
+                            btn = K.PillBtn("Update to " + Updater.LatestVersion, Theme.Accent, Brushes.White, 30, () =>
+                                Updater.InstallAsync(() => Dispatcher.BeginInvoke(new Action(() => isl.Restart()))));
+                        break;
+                    case Updater.St.Downloading: text = "Downloading… " + (int)(Updater.Progress * 100) + "%"; break;
+                    case Updater.St.Installing: text = "Installing, the island will restart…"; break;
+                    case Updater.St.Error: text = Updater.Error; btn = K.PillBtn("Try again", Theme.Surface, Theme.Text, 30, check); break;
+                    default: text = "Updates come from github.com/" + AppInfo.Repo + "."; btn = K.PillBtn("Check for updates", Theme.Surface, Theme.Text, 30, check); break;
+                }
+                desc.Text = text;
+                host.Child = btn;
+                notesRow.Visibility = Updater.State == Updater.St.Available && Updater.PageUrl.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+            };
+            Updater.OnChange = () => Dispatcher.BeginInvoke(new Action(() => { if (IsPage("about")) refresh(); }));
+            refresh();
+            // opening About checks on its own if the last check is stale
+            if (!Updater.Busy && (DateTime.Now - Updater.LastCheck).TotalMinutes > 10) Updater.CheckAsync(null);
+
+            return Card(row, notesRow,
+                Tog("Check for updates at start", "Shows a notice on the island when a new version is out.", S.AutoCheckUpdates, v => S.AutoCheckUpdates = v));
         }
     }
 }

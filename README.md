@@ -198,6 +198,7 @@ Handy ones:
 | `caffeine [on\|off]` · `theme <palette>` · `dismiss` | Misc |
 | `simulate <volume\|brightness\|charging\|track\|urgent\|drop>` | Show a sample event |
 | `setup [step]` | Open the setup wizard |
+| `update [check\|install]` · `quit` | Check GitHub for a newer release (result in `error.log`) or update and restart · Quit |
 
 Other flags: `--silent` (start without the hello event), `--uninstall`.
 

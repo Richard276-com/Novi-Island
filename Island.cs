@@ -1380,6 +1380,15 @@ namespace DynIsland
                     case "setup": { OpenSetup(); int sn; if (int.TryParse(arg, out sn) && setupWin != null) { var w2 = setupWin; var tm = Timer(600, null); tm.Tick += delegate { tm.Stop(); w2.ShowStep(sn); }; tm.Start(); } } break;
                     case "settings-search": OpenSettings(null); if (settingsWin != null) settingsWin.Search(string.Join(" ", a.Skip(1))); break;
                     case "welcome": PreviewWelcome(); break;
+                    case "quit": Close(); break;
+                    case "update":
+                        // update [check|install]: check logs the result; install checks first, then updates if newer
+                        Updater.CheckAsync(newer =>
+                        {
+                            Log.Write("update: current=" + AppInfo.Version + " latest=" + Updater.LatestVersion + " newer=" + newer + " asset=" + Updater.AssetName + " state=" + Updater.State + (Updater.State == Updater.St.Error ? " error=" + Updater.Error : ""));
+                            if (newer && arg == "install") Updater.InstallAsync(() => Dispatcher.BeginInvoke(new Action(Restart)));
+                        });
+                        break;
                     case "event": SystemEvent("", Theme.Accent, arg ?? "Event", a.Length > 2 ? a[2] : null, Pri.System, S.SystemMs, null, null); break;
                     case "timer":
                         if (arg == "toggle") TimerPauseToggle(); else if (arg == "cancel") TimerCancel();
@@ -1492,6 +1501,22 @@ namespace DynIsland
 
         void StartupGreeting()
         {
+            // a new GitHub release: announce it once per version, a while after start
+            if (S.AutoCheckUpdates)
+            {
+                var ut = Timer(15000, null);
+                ut.Tick += delegate
+                {
+                    ut.Stop();
+                    Updater.CheckAsync(newer => Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        if (!newer || S.UpdateNotified == Updater.LatestVersion) return;
+                        S.UpdateNotified = Updater.LatestVersion; Store.Save();
+                        SystemEvent("", Theme.Accent, "Update available: v" + Updater.LatestVersion, "Click to open Settings → About and update", Pri.System, 8000, "update", () => OpenSettings("about"));
+                    })));
+                };
+                ut.Start();
+            }
             // brand-new install: the setup wizard comes up once the island has settled
             if (Store.FirstRun && !S.SetupDone) { var st = Timer(1400, null); st.Tick += delegate { st.Stop(); OpenSetup(); }; st.Start(); }
             if (S.Welcome)
@@ -2457,6 +2482,7 @@ namespace DynIsland
             using (var m = new Mutex(true, "DynIsland_SingleInstance", out created))
             {
                 if (!created) return;
+                Updater.CleanupOld();
                 var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
                 app.DispatcherUnhandledException += (s, e) => { Log.Error(e.Exception); e.Handled = true; };
                 AppDomain.CurrentDomain.UnhandledException += (s, e) => Log.Write("FATAL " + e.ExceptionObject);
