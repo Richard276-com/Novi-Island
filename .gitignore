@@ -1,0 +1,16 @@
+# Build output (publish the exe via GitHub Releases instead)
+*.exe
+*.pdb
+bin/
+obj/
+
+# Local / editor
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.log
+Thumbs.db
+desktop.ini
+.claude/
