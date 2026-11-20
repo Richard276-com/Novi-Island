@@ -133,6 +133,11 @@ namespace DynIsland
         [StructLayout(LayoutKind.Sequential)] struct BMIH { public uint biSize; public int biWidth, biHeight; public ushort biPlanes, biBitCount; public uint biCompression, biSizeImage; public int biXPelsPerMeter, biYPelsPerMeter; public uint biClrUsed, biClrImportant; }
         [StructLayout(LayoutKind.Sequential)] struct DIBSECTION { public BITMAPS dsBm; public BMIH dsBmih; public uint f0, f1, f2; public IntPtr dshSection; public uint dsOffset; }
         [DllImport("gdi32.dll")] static extern int GetObject(IntPtr h, int size, ref DIBSECTION ds);
+        // BITMAPINFO: the header plus room for a colour table GetDIBits may touch
+        [StructLayout(LayoutKind.Sequential)] struct BMI32 { public BMIH h; public uint c0, c1, c2, c3; }
+        [DllImport("gdi32.dll")] static extern int GetDIBits(IntPtr hdc, IntPtr hbm, uint start, uint lines, byte[] bits, ref BMI32 bmi, uint usage);
+        [DllImport("user32.dll")] static extern IntPtr GetDC(IntPtr h);
+        [DllImport("user32.dll")] static extern int ReleaseDC(IntPtr h, IntPtr dc);
 
         public static ImageSource ShellThumb(string path, int size)
         {
@@ -144,19 +149,16 @@ namespace DynIsland
                 if (f.GetImage(new NSIZE { cx = size, cy = size }, 0, out hbm) != 0 || hbm == IntPtr.Zero) return null;
                 var ds = new DIBSECTION();
                 if (GetObject(hbm, Marshal.SizeOf(typeof(DIBSECTION)), ref ds) == 0 || ds.dsBm.bmBits == IntPtr.Zero || ds.dsBm.bmBitsPixel != 32) return null;
-                int w = ds.dsBm.bmWidth, h = ds.dsBm.bmHeight, stride = ds.dsBm.bmWidthBytes;
+                int w = ds.dsBm.bmWidth, h = ds.dsBm.bmHeight, stride = w * 4;
+                // GetObject reports biHeight positive for top-down DIBs too, so its sign can't say whether to
+                // flip (Firefox's icon came out upside down). GetDIBits into a top-down buffer always lands right.
                 var px = new byte[stride * h];
-                Marshal.Copy(ds.dsBm.bmBits, px, 0, px.Length);
-                if (ds.dsBmih.biHeight > 0)   // bottom-up DIB: flip rows
-                {
-                    var row = new byte[stride];
-                    for (int y = 0; y < h / 2; y++)
-                    {
-                        Buffer.BlockCopy(px, y * stride, row, 0, stride);
-                        Buffer.BlockCopy(px, (h - 1 - y) * stride, px, y * stride, stride);
-                        Buffer.BlockCopy(row, 0, px, (h - 1 - y) * stride, stride);
-                    }
-                }
+                var bi = new BMI32 { h = new BMIH { biSize = 40, biWidth = w, biHeight = -h, biPlanes = 1, biBitCount = 32 } };
+                IntPtr dc = GetDC(IntPtr.Zero);
+                int lines;
+                try { lines = GetDIBits(dc, hbm, 0, (uint)h, px, ref bi, 0); }
+                finally { ReleaseDC(IntPtr.Zero, dc); }
+                if (lines != h) return null;
                 // thumbnails of opaque images can come back with alpha = 0 everywhere
                 bool anyAlpha = false;
                 for (int i = 3; i < px.Length; i += 4) if (px[i] != 0) { anyAlpha = true; break; }
@@ -255,12 +257,16 @@ namespace DynIsland
         static SolidColorBrush NB() { return new SolidColorBrush(Colors.Black); }
         public static readonly SolidColorBrush Island = NB(), Surface = NB(), Raised = NB(), Hover = NB(), Text = NB(), Text2 = NB(), Text3 = NB(),
             Hairline = NB(), Highlight = NB(), Accent = NB(), Accent2 = NB(), Green = NB(), Orange = NB(), Red = NB(), Yellow = NB(), OnAccent = NB(),
-            AccentSoft = NB(), RedSoft = NB(), OrangeSoft = NB(), GreenSoft = NB(), Shadow = NB();
+            AccentSoft = NB(), RedSoft = NB(), OrangeSoft = NB(), GreenSoft = NB(), Shadow = NB(),
+            // frosted Settings window: translucent tints over the acrylic backdrop
+            GlassBase = NB(), GlassSide = NB(), GlassCard = NB(), GlassEdge = NB(), GlassField = NB(), AccentEdge = NB();
+        public static readonly RadialGradientBrush Glow = new RadialGradientBrush { Center = new Point(0.9, 0), GradientOrigin = new Point(0.9, 0), RadiusX = 0.75, RadiusY = 0.9 };
+        static readonly GradientStop w0 = new GradientStop(Colors.Transparent, 0), w1 = new GradientStop(Colors.Transparent, 1);
         public static readonly LinearGradientBrush AccentFill = new LinearGradientBrush { StartPoint = new Point(0, 0.5), EndPoint = new Point(1, 0.5) };
         static readonly GradientStop g0 = new GradientStop(Colors.White, 0), g1 = new GradientStop(Colors.White, 1);
         public static event Action Changed;
 
-        static Theme() { AccentFill.GradientStops.Add(g0); AccentFill.GradientStops.Add(g1); }
+        static Theme() { AccentFill.GradientStops.Add(g0); AccentFill.GradientStops.Add(g1); Glow.GradientStops.Add(w0); Glow.GradientStops.Add(w1); }
 
         public static Color Hex(string s)
         {
@@ -336,6 +342,9 @@ namespace DynIsland
             Set(Green, p.Green, anim); Set(Orange, p.Orange, anim); Set(Red, p.Red, anim); Set(Yellow, p.Yellow, anim);
             Set(AccentSoft, A(p.Accent, 0.18), anim); Set(RedSoft, A(p.Red, 0.18), anim); Set(OrangeSoft, A(p.Orange, 0.18), anim); Set(GreenSoft, A(p.Green, 0.18), anim);
             Set(Shadow, A(Colors.Black, 0.5), false);
+            Set(GlassBase, A(p.Surface, 0.42), anim); Set(GlassSide, A(p.Island, 0.3), anim); Set(GlassCard, A(p.Raised, 0.42), anim);
+            Set(GlassEdge, A(p.Text, 0.08), anim); Set(GlassField, A(p.Island, 0.45), anim); Set(AccentEdge, A(p.Accent, 0.45), anim);
+            w0.Color = A(p.Accent, 0.22); w1.Color = A(p.Accent, 0);
             double lum = 0.2126 * p.Accent.R / 255 + 0.7152 * p.Accent.G / 255 + 0.0722 * p.Accent.B / 255;
             Set(OnAccent, lum > 0.6 ? p.Island : Colors.White, anim);
             g0.BeginAnimation(GradientStop.ColorProperty, null); g1.BeginAnimation(GradientStop.ColorProperty, null);

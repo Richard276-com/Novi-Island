@@ -23,6 +23,7 @@ namespace DynIsland
         public static readonly BluetoothService Bt = new BluetoothService();
         public static readonly SystemStats Stats = new SystemStats();
         public static readonly HotkeyService Hotkeys = new HotkeyService();
+        public static readonly WinKeys WinKeys = new WinKeys();
         public static readonly AiService Ai = new AiService();
         public static readonly AppIndex Apps = new AppIndex();
     }

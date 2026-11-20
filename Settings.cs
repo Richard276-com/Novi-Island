@@ -111,6 +111,11 @@ namespace DynIsland
         public string WallhavenCategories = "111";
         // hotkeys
         public Dictionary<string, string> Hotkeys = new Dictionary<string, string>();
+        public bool LinuxWinKeys = false;      // Win+1..9 desktops, Win+Enter/F/B/Q, Win+Space or Win+/ launcher (keyboard hook)
+        public string WinTerminal = "wt.exe";
+        public string WinFiles = "explorer.exe";
+        public string WinBrowser = "";         // empty = the default browser
+        public bool WinMoveFollow = true;      // Win+Shift+N also switches to desktop N (Hyprland movetoworkspace)
         public string LastPage = "home";
         public bool SetupDone = false;
         public bool EasterEgg = false;          // the secret has been found (rainbow rim on the Settings logo)         // the first-run setup wizard has been completed or skipped
@@ -287,8 +292,10 @@ namespace DynIsland
             this.isl = isl;
             Title = "Dynamic Island Settings";
             // A normal (non-layered) window: GPU-rendered, with the native Windows 11 shadow and rounded corners.
-            WindowStyle = WindowStyle.None; ResizeMode = ResizeMode.NoResize; Background = Theme.Surface;
-            System.Windows.Shell.WindowChrome.SetWindowChrome(this, new System.Windows.Shell.WindowChrome { CaptionHeight = 0, GlassFrameThickness = new Thickness(0, 0, 0, 1), ResizeBorderThickness = new Thickness(0), UseAeroCaptionButtons = false, CornerRadius = new CornerRadius(0) });
+            // Frosted: the DWM frame is extended over the whole client area and given the acrylic system backdrop;
+            // WPF draws on a transparent surface and the pages tint it with translucent Theme.Glass* brushes.
+            WindowStyle = WindowStyle.None; ResizeMode = ResizeMode.NoResize; Background = Brushes.Transparent;
+            System.Windows.Shell.WindowChrome.SetWindowChrome(this, new System.Windows.Shell.WindowChrome { CaptionHeight = 0, GlassFrameThickness = new Thickness(-1), ResizeBorderThickness = new Thickness(0), UseAeroCaptionButtons = false, CornerRadius = new CornerRadius(0) });
             // fit the work area (small / high-DPI screens), centred on it
             var wa = SystemParameters.WorkArea;
             Width = Math.Min(900, wa.Width - 40); Height = Math.Min(660, wa.Height - 40);
@@ -303,6 +310,10 @@ namespace DynIsland
                 int round = 2, dark = 1;
                 Native.DwmSetWindowAttribute(h, 33, ref round, 4);   // rounded corners
                 Native.DwmSetWindowAttribute(h, 20, ref dark, 4);    // dark frame
+                var src = System.Windows.Interop.HwndSource.FromHwnd(h);
+                if (src != null) src.CompositionTarget.BackgroundColor = Colors.Transparent;
+                int acrylic = 3;                                       // DWMSBT_TRANSIENTWINDOW (acrylic blur)
+                if (Native.DwmSetWindowAttribute(h, 38, ref acrylic, 4) != 0) shell.Background = Theme.Surface;   // pre-22H2: stay solid
             };
             Loaded += delegate
             {
@@ -373,14 +384,17 @@ namespace DynIsland
 
         void Build(int page)
         {
-            shell = new Border { Background = Theme.Surface };
+            shell = new Border { Background = Theme.GlassBase };
             var g = new Grid();
             g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(236) });
             g.ColumnDefinitions.Add(new ColumnDefinition());
             shell.Child = g;
             Content = shell;
+            var glow = new Border { Background = Theme.Glow, IsHitTestVisible = false };   // warm accent light in the corner
+            Grid.SetColumnSpan(glow, 2);
+            g.Children.Add(glow);
 
-            var side = new Border { Background = Theme.Island };
+            var side = new Border { Background = Theme.GlassSide, BorderBrush = Theme.GlassEdge, BorderThickness = new Thickness(0, 0, 1, 0) };
             var sideGrid = new Grid { Margin = new Thickness(14, 20, 14, 14) };
             sideGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             sideGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -392,7 +406,8 @@ namespace DynIsland
 
             // search
             search = new TextBox();
-            var sf = K.Field(search, "Search settings  (Ctrl+F)", 0, Theme.Raised);
+            var sf = K.Field(search, "Search settings  (Ctrl+F)", 0, Theme.GlassField);
+            var sfBox = (Border)sf.Children[0]; sfBox.BorderBrush = Theme.GlassEdge; sfBox.BorderThickness = new Thickness(1);
             var sg = new Grid { Margin = new Thickness(0, 0, 0, 12) };
             var sIcon = K.Glyph("", 11, Theme.Text3); sIcon.HorizontalAlignment = HorizontalAlignment.Right; sIcon.Margin = new Thickness(0, 0, 12, 0); sIcon.IsHitTestVisible = false;
             sg.Children.Add(sf); sg.Children.Add(sIcon);
@@ -404,7 +419,7 @@ namespace DynIsland
 
             var navScroll = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Hidden };
             navHost = new Grid();
-            navInd = new Border { Height = 34, CornerRadius = new CornerRadius(10), Background = Theme.Raised, VerticalAlignment = VerticalAlignment.Top, Opacity = 0 };
+            navInd = new Border { Height = 34, CornerRadius = new CornerRadius(10), Background = Theme.AccentSoft, BorderBrush = Theme.AccentEdge, BorderThickness = new Thickness(1), VerticalAlignment = VerticalAlignment.Top, Opacity = 0 };
             navIndT = new TranslateTransform(); navInd.RenderTransform = navIndT;
             navHost.Children.Add(navInd);
             var navSp = new StackPanel();
@@ -539,7 +554,7 @@ namespace DynIsland
         {
             for (int i = 0; i < navLabels.Count; i++)
             {
-                navLabels[i].Foreground = i == curPage ? Theme.Text : Theme.Text2;
+                navLabels[i].Foreground = i == curPage ? (Brush)Theme.Accent : Theme.Text2;
                 navGlyphs[i].Foreground = i == curPage ? (Brush)Theme.Accent : Theme.Text2;
             }
         }
@@ -664,6 +679,7 @@ namespace DynIsland
             sp.Children.Add(K.TB(title, 26, Theme.Text, FontWeights.SemiBold));
             var d = K.TB(sub, 13, Theme.Text2, FontWeights.Normal); d.Margin = new Thickness(0, 4, 0, 4); d.TextWrapping = TextWrapping.Wrap;
             sp.Children.Add(d);
+            sp.Children.Add(new Border { Height = 1, Background = Theme.GlassEdge, Margin = new Thickness(0, 14, 0, 4) });
             return sp;
         }
 
@@ -684,7 +700,7 @@ namespace DynIsland
                 if (!first) sp.Children.Add(new Border { Height = 1, Background = Theme.Hairline, Margin = new Thickness(16, 0, 0, 0) });
                 sp.Children.Add(r); first = false;
             }
-            return new Border { CornerRadius = new CornerRadius(14), Background = Theme.Raised, Margin = new Thickness(0, 8, 0, 0), Child = sp };
+            return new Border { CornerRadius = new CornerRadius(14), Background = Theme.GlassCard, BorderBrush = Theme.GlassEdge, BorderThickness = new Thickness(1), Margin = new Thickness(0, 8, 0, 0), Child = sp };
         }
 
         // A labelled settings row. Tag carries its words for search ("§" marks it as a row).
@@ -1426,6 +1442,15 @@ namespace DynIsland
             });
             all.HorizontalAlignment = HorizontalAlignment.Left; all.Margin = new Thickness(0, 12, 0, 0);
             p.Children.Add(all);
+            var lin = Card(
+                TogR("Linux-style Win keys", "Win+1…9 workspaces (virtual desktops, made on demand) · Win+Shift+1…9 send the window there · Win+Enter terminal · Win+F files · Win+B browser · Win+Q close window · Win+Space or Win+/ launcher. Overrides the Windows defaults for those keys only while on; nothing in Windows is changed, so turning it off gives them straight back.",
+                    S.LinuxWinKeys, v => { S.LinuxWinKeys = v; Svc.WinKeys.Apply(); }),
+                S.LinuxWinKeys ? TogR("Follow the moved window", "Win+Shift+N also switches to workspace N.", S.WinMoveFollow, v => S.WinMoveFollow = v) : null,
+                S.LinuxWinKeys ? Txt("Terminal", "Win+Enter", S.WinTerminal, 220, "wt.exe", v => S.WinTerminal = v) : null,
+                S.LinuxWinKeys ? Txt("Files", "Win+F", S.WinFiles, 220, "explorer.exe", v => S.WinFiles = v) : null,
+                S.LinuxWinKeys ? Txt("Browser", "Win+B. Empty = your default browser.", S.WinBrowser, 220, "default browser", v => S.WinBrowser = v) : null);
+            lin.Margin = new Thickness(0, 16, 0, 0);
+            p.Children.Add(lin);
             var keys = K.TB("Inside the island: ← → change page · 1–9 jump to a page · Space play/pause or pause the timer · Esc closes. Middle-click plays/pauses, scroll changes volume.", 12, Theme.Text2, FontWeights.Normal);
             keys.TextWrapping = TextWrapping.Wrap; keys.Margin = new Thickness(4, 14, 0, 0);
             p.Children.Add(keys);
@@ -1437,6 +1462,9 @@ namespace DynIsland
             var p = Page("About", "Dynamic Island for Windows. Native WPF, no dependencies.");
             p.Children.Add(BuildUpdates());
             Func<bool, string> ok = b => b ? "active" : "not available";
+            string repoUrl = "https://github.com/" + AppInfo.Repo;
+            p.Children.Add(Card(Row("GitHub", "github.com/" + AppInfo.Repo + " · source code, issues and releases.",
+                K.GlyphPill("", "Open on GitHub", Theme.Surface, Theme.Text, 30, () => AppIndex.Open(repoUrl)))));
             p.Children.Add(Card(
                 Row("Volume (CoreAudio)", ok(Svc.Audio.Available), null),
                 Row("Brightness (WMI)", ok(Svc.Brightness.Available), null),

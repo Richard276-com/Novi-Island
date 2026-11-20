@@ -1279,6 +1279,7 @@ namespace DynIsland
             Native.AddClipboardFormatListener(hwnd);
             Svc.Hotkeys.Init(hwnd);
             Svc.Hotkeys.Pressed += OnHotkey;
+            Svc.WinKeys.Init(hwnd, OnHotkey);
             if (gpu)
             {
                 src.CompositionTarget.BackgroundColor = Colors.Transparent;
@@ -1299,7 +1300,7 @@ namespace DynIsland
         IntPtr WndProc(IntPtr h, int msg, IntPtr w, IntPtr l, ref bool handled)
         {
             if (msg == 0x031D) { clipDebounce.Stop(); clipDebounce.Start(); }
-            else if (msg == 0x0312) Svc.Hotkeys.Handle(w.ToInt32());
+            else if (msg == 0x0312) { if (!Svc.WinKeys.Handle(w.ToInt32())) Svc.Hotkeys.Handle(w.ToInt32()); }
             else if (msg == 0x020E) { int delta = (short)((w.ToInt64() >> 16) & 0xFFFF); OnHWheel(delta); handled = true; }
             else if (msg == 0x02E0) { dpi = (w.ToInt32() & 0xFFFF) / 96.0; SetWin(winW, winH); }
             else if (msg == 0x007C && gpu && w.ToInt32() == -20)
@@ -1377,6 +1378,7 @@ namespace DynIsland
                     case "caffeine": SetCaffeine(arg == "on" || (arg == null && !caffeine)); break;
                     case "wallsearch": OpenMode("wallpaper"); SwitchWallTab("online"); wSearch.Text = string.Join(" ", a.Skip(1)); wSearchActive = wSearch.Text.Trim().Length > 0; WallSortState(); LoadOnline(true); break;
                     case "party": Party(); break;
+                    case "winkey": if (arg != null) Svc.WinKeys.Run(arg); else Log.Write("winkeys active=" + Svc.WinKeys.Active); break;
                     case "setup": { OpenSetup(); int sn; if (int.TryParse(arg, out sn) && setupWin != null) { var w2 = setupWin; var tm = Timer(600, null); tm.Tick += delegate { tm.Stop(); w2.ShowStep(sn); }; tm.Start(); } } break;
                     case "settings-search": OpenSettings(null); if (settingsWin != null) settingsWin.Search(string.Join(" ", a.Skip(1))); break;
                     case "welcome": PreviewWelcome(); break;
@@ -1566,7 +1568,7 @@ namespace DynIsland
         void Cleanup()
         {
             Store.SaveNow(); Store.SaveTodos();
-            Svc.Ai.Cancel(); Svc.Hotkeys.Stop(); Svc.Brightness.Stop(); Svc.Bt.Stop(); mouseHook.Stop();
+            Svc.Ai.Cancel(); Svc.Hotkeys.Stop(); Svc.WinKeys.Stop(); Svc.Brightness.Stop(); Svc.Bt.Stop(); mouseHook.Stop();
             foreach (var h in winHooks) Native.UnhookWinEvent(h);
             if (moveHook != IntPtr.Zero) Native.UnhookWinEvent(moveHook);
             SystemEvents.PowerModeChanged -= OnPowerMode;
@@ -1587,6 +1589,7 @@ namespace DynIsland
         string fontKey;
         public void ApplySettings()
         {
+            Svc.WinKeys.Apply();
             string fk = S.Font + "|" + S.FontCustom;
             if (fk != fontKey)
             {
